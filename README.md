@@ -79,7 +79,7 @@ npm run prisma:migrate
 **Important**: This must be run before starting the server for the first time.
 
 ```bash
-npm run prisma:migrate
+npm run prisma:generate
 ```
 
 4. Start the application:
@@ -133,22 +133,6 @@ To find your Plex server machine identifier:
 The application uses a volume for persistent data:
 
 - `./data:/app/data` - SQLite database storage
-
-## Development
-
-### Database Migrations
-
-Create a new migration:
-
-```bash
-npm run prisma:migrate
-```
-
-Regenerate Prisma Client:
-
-```bash
-npm run prisma:generate
-```
 
 ## License
 
