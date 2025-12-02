@@ -13,7 +13,7 @@ Automatically sync your Plex watch history to Trakt.tv using webhooks.
 - 🔐 Secure user authentication with Plex and Trakt
 - 📊 Multi-user support - only users with access to your Plex server can login and add their Trakt credentials
 
-[App](/public/photos/app.png)
+![App](/photos/app.png)
 
 ## Prerequisites
 
