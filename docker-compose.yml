@@ -9,6 +9,8 @@ services:
       - ./data:/app/data
     environment:
       - NODE_ENV=production
+      # Database
+      - DATABASE_URL=file:/app/data/data.db
       # External URL for reverse proxy setups
       - EXTERNAL_URL=${EXTERNAL_URL:-http://localhost:3000}
       # Plex Configuration

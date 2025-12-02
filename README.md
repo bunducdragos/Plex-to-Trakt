@@ -25,7 +25,7 @@ Automatically sync your Plex watch history to Trakt.tv using webhooks.
 
 ```bash
 clone the repo
-cd plex-trakt-sync
+cd Plex-to-Trakt
 ```
 
 2. Create a `.env` file from the example:
@@ -131,25 +131,6 @@ To find your Plex server machine identifier:
 The application uses a volume for persistent data:
 
 - `./data:/app/data` - SQLite database storage
-
-## Troubleshooting
-
-### Webhook not receiving events
-
-- Ensure your Plex server can reach the webhook URL
-- Check that you have Plex Pass (required for webhooks)
-- Verify the webhook URL in Plex Settings → Webhooks
-
-### Authentication issues
-
-- Verify your `PLEX_CLIENT_ID` is set correctly
-- Check that redirect URIs match your configuration
-- Ensure `SESSION_SECRET` is set
-
-### Database issues
-
-- The database is automatically created on first run
-- Check file permissions on the data directory
 
 ## Development
 
