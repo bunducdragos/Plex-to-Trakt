@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Plex → Trakt Sync</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 800px;
+        margin: 50px auto;
+        padding: 20px;
+        background: #1a1a1a;
+        color: #fff;
+      }
+      h1 {
+        color: #e5a00d;
+      }
+      .section {
+        background: #2a2a2a;
+        padding: 20px;
+        margin: 20px 0;
+        border-radius: 8px;
+      }
+      button,
+      .btn {
+        background: #e5a00d;
+        color: #000;
+        padding: 10px 20px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 14px;
+        text-decoration: none;
+        display: inline-block;
+      }
+      button:hover,
+      .btn:hover {
+        background: #cc8d00;
+      }
+      input {
+        width: 100%;
+        padding: 8px;
+        margin: 5px 0 15px 0;
+        border: 1px solid #444;
+        border-radius: 4px;
+        background: #333;
+        color: #fff;
+      }
+      label {
+        font-weight: bold;
+        color: #aaa;
+      }
+      .status {
+        color: #4caf50;
+      }
+      .error {
+        color: #f44336;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>🎬 Plex → Trakt Sync</h1>
+    <p>Automatically sync your Plex watch history to Trakt using webhooks</p>
+
+    <div class="section" id="step1">
+      <h2>Step 1: Login with Plex</h2>
+      <p>First, authenticate with your Plex account to verify you have access to the server.</p>
+      <button onclick="loginPlex()">Login with Plex</button>
+      <div id="plexStatus"></div>
+    </div>
+
+    <div class="section" id="step2" style="display: none">
+      <h2>Step 2: Configure Trakt</h2>
+      <p>Create a Trakt API application at <a href="https://trakt.tv/oauth/applications/new" target="_blank" style="color: #e5a00d">trakt.tv/oauth/applications</a></p>
+      <p>Use this redirect URI: <code id="redirectUri">Loading...</code></p>
+
+      <form onsubmit="saveTraktSecrets(event)">
+        <label>Trakt Client ID</label>
+        <input id="traktClientId" required />
+
+        <label>Trakt Client Secret</label>
+        <input id="traktClientSecret" type="password" required />
+
+        <button type="submit">Save & Authorize Trakt</button>
+      </form>
+      <div id="traktStatus"></div>
+    </div>
+
+    <div class="section" id="step3" style="display: none">
+      <h2>✅ Setup Complete!</h2>
+      <p class="status">Your Plex watch history will now automatically sync to Trakt.</p>
+      <p>
+        <strong>Note for server owner:</strong><br />
+        Configure the Plex webhook URL in your Plex server settings (Settings → Webhooks):
+      </p>
+      <p><code id="webhookUrl">Loading...</code></p>
+
+      <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #444">
+        <h3>Manage Settings</h3>
+        <button onclick="showTraktSettings()" style="background: #666">Change Trakt Credentials</button>
+        <button onclick="removeTraktCredentials()" style="background: #f44336; margin-left: 10px">Remove Trakt Connection</button>
+        <button onclick="logout()" style="background: #666; margin-left: 10px">Logout</button>
+      </div>
+    </div>
+
+    <script>
+      let currentUserId = null
+      let pollInterval = null
+
+      // Get external URL and set redirect URI on page load
+      async function loadRedirectUri() {
+        try {
+          const res = await fetch("/api/config")
+          const data = await res.json()
+          const redirectUri = `${data.externalUrl}/auth/trakt/callback`
+          const webhookUrl = `${data.externalUrl}/webhooks/plex`
+          document.getElementById("redirectUri").textContent = redirectUri
+          document.getElementById("webhookUrl").textContent = webhookUrl
+        } catch (err) {
+          document.getElementById("redirectUri").textContent = "http://localhost:3000/auth/trakt/callback"
+          document.getElementById("webhookUrl").textContent = "http://localhost:3000/webhooks/plex"
+        }
+      }
+
+      // Run on page load
+      loadRedirectUri()
+
+      // Check if user is already logged in on page load
+      async function checkUserStatus() {
+        const savedUserId = localStorage.getItem("plexTraktUserId")
+        if (savedUserId) {
+          try {
+            const res = await fetch(`/auth/plex/user-status/${savedUserId}`)
+            const data = await res.json()
+
+            if (data.ok) {
+              currentUserId = parseInt(savedUserId)
+              document.getElementById("plexStatus").innerHTML = `<p class="status">✓ Logged in as ${data.username}</p>`
+
+              if (data.hasTraktTokens) {
+                // Fully configured
+                document.getElementById("step2").style.display = "none"
+                document.getElementById("step3").style.display = "block"
+              } else {
+                // Show step 2 and pre-fill if we have saved secrets
+                document.getElementById("step2").style.display = "block"
+                if (data.traktClientId) {
+                  document.getElementById("traktClientId").value = data.traktClientId
+                }
+              }
+            } else {
+              localStorage.removeItem("plexTraktUserId")
+            }
+          } catch (err) {
+            console.error("Error checking user status:", err)
+          }
+        }
+      }
+
+      // Run on page load
+      checkUserStatus()
+
+      async function loginPlex() {
+        try {
+          // Get Plex PIN and auth URL
+          const res = await fetch("/auth/plex/login-url")
+          const { url, pinId } = await res.json()
+
+          // Update status
+          document.getElementById("plexStatus").innerHTML = "<p>Opening Plex login... Please authorize in the popup window.</p>"
+
+          // Open Plex auth in popup
+          const popup = window.open(url, "plex-auth", "width=600,height=700")
+
+          // Poll for authorization
+          pollInterval = setInterval(async () => {
+            try {
+              const checkRes = await fetch(`/auth/plex/check-pin/${pinId}`)
+              const data = await checkRes.json()
+
+              if (data.error) {
+                clearInterval(pollInterval)
+                document.getElementById("plexStatus").innerHTML = `<p class="error">${data.error}</p>`
+                return
+              }
+
+              if (data.authorized) {
+                clearInterval(pollInterval)
+                currentUserId = data.userId
+                localStorage.setItem("plexTraktUserId", data.userId)
+                document.getElementById("plexStatus").innerHTML = `<p class="status">✓ Plex authenticated as ${data.username}!</p>`
+
+                // Check if user already has Trakt configured
+                checkUserStatus()
+
+                if (popup && !popup.closed) popup.close()
+              }
+            } catch (err) {
+              console.error("Poll error:", err)
+            }
+          }, 1000) // Poll every second
+
+          // Stop polling after 5 minutes
+          setTimeout(() => {
+            if (pollInterval) {
+              clearInterval(pollInterval)
+              document.getElementById("plexStatus").innerHTML = '<p class="error">Authentication timed out. Please try again.</p>'
+            }
+          }, 300000)
+        } catch (err) {
+          document.getElementById("plexStatus").innerHTML = `<p class="error">Error: ${err.message}</p>`
+        }
+      }
+
+      async function saveTraktSecrets(e) {
+        e.preventDefault()
+
+        const traktClientId = document.getElementById("traktClientId").value
+        const traktClientSecret = document.getElementById("traktClientSecret").value
+
+        try {
+          // Save secrets
+          await fetch("/auth/trakt/save-secrets", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ userId: currentUserId, traktClientId, traktClientSecret }),
+          })
+
+          // Get authorization URL
+          const res = await fetch(`/auth/trakt/authorize?userId=${currentUserId}`)
+          const { url } = await res.json()
+
+          // Open Trakt auth
+          const popup = window.open(url, "trakt-auth", "width=600,height=700")
+
+          document.getElementById("traktStatus").innerHTML = "<p>Please authorize in the popup window...</p>"
+
+          // Listen for message from popup
+          const messageHandler = async (event) => {
+            if (event.data && event.data.type === "trakt-code") {
+              window.removeEventListener("message", messageHandler)
+              const code = event.data.code
+
+              try {
+                // Exchange code for tokens
+                const tokenRes = await fetch("/auth/trakt/callback", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ userId: currentUserId, code }),
+                })
+
+                const data = await tokenRes.json()
+                if (data.error) {
+                  document.getElementById("traktStatus").innerHTML = `<p class="error">${data.error}</p>`
+                  return
+                }
+
+                document.getElementById("step3").style.display = "block"
+                document.getElementById("step2").style.display = "none"
+              } catch (err) {
+                document.getElementById("traktStatus").innerHTML = `<p class="error">Error: ${err.message}</p>`
+              }
+            }
+          }
+
+          window.addEventListener("message", messageHandler)
+
+          // Timeout after 5 minutes
+          setTimeout(() => {
+            window.removeEventListener("message", messageHandler)
+            if (document.getElementById("step3").style.display === "none") {
+              document.getElementById("traktStatus").innerHTML = '<p class="error">Authentication timed out. Please try again.</p>'
+            }
+          }, 300000)
+        } catch (err) {
+          document.getElementById("traktStatus").innerHTML = `<p class="error">Error: ${err.message}</p>`
+        }
+      }
+
+      function showTraktSettings() {
+        document.getElementById("step3").style.display = "none"
+        document.getElementById("step2").style.display = "block"
+        document.getElementById("traktStatus").innerHTML = "<p>Update your Trakt credentials below</p>"
+      }
+
+      async function removeTraktCredentials() {
+        if (!confirm("Are you sure you want to remove your Trakt connection? This will delete your Trakt credentials and tokens.")) {
+          return
+        }
+
+        try {
+          const res = await fetch("/auth/trakt/remove", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ userId: currentUserId }),
+          })
+
+          const data = await res.json()
+          if (data.ok) {
+            document.getElementById("step3").style.display = "none"
+            document.getElementById("step2").style.display = "block"
+            document.getElementById("traktClientId").value = ""
+            document.getElementById("traktClientSecret").value = ""
+            document.getElementById("traktStatus").innerHTML = '<p class="status">Trakt connection removed. You can set up a new connection below.</p>'
+          } else {
+            alert("Failed to remove Trakt credentials")
+          }
+        } catch (err) {
+          alert("Error: " + err.message)
+        }
+      }
+
+      function logout() {
+        if (!confirm("Are you sure you want to logout?")) {
+          return
+        }
+        localStorage.removeItem("plexTraktUserId")
+        location.reload()
+      }
+    </script>
+  </body>
+</html>

@@ -1,0 +1,28 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model User {
+  id            Int     @id @default(autoincrement())
+  plexId        String  @unique
+  plexEmail     String?
+  plexUsername  String?
+  plexAuthToken String?
+
+  traktClientId     String?
+  traktClientSecret String?
+  traktAccessToken  String?
+  traktRefreshToken String?
+  traktExpiresAt    DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

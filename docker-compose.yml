@@ -1,0 +1,19 @@
+services:
+  plex-to-trakt:
+    build: .
+    container_name: plex-to-trakt
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - NODE_ENV=production
+      # External URL for reverse proxy setups
+      - EXTERNAL_URL=${EXTERNAL_URL:-http://localhost:3000}
+      # Plex Configuration
+      - PLEX_CLIENT_ID=${PLEX_CLIENT_ID}
+      - PLEX_SERVER_ID=${PLEX_SERVER_ID}
+      - PLEX_SERVER_IP=${PLEX_SERVER_IP}
+      # Session Secret
+      - SESSION_SECRET=${SESSION_SECRET}
