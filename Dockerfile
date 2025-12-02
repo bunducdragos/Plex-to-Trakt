@@ -22,5 +22,5 @@ RUN mkdir -p /app/data
 # Expose port
 EXPOSE 3000
 
-# Start script that runs migrations on first start and then starts the app
-CMD npx prisma migrate deploy && npm start
+# Start script that pushes schema changes and then starts the app
+CMD npx prisma db push && npm start

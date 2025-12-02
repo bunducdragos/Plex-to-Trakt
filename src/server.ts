@@ -28,17 +28,6 @@ if (missingEnvVars.length > 0) {
   process.exit(1)
 }
 
-// Check if database migrations exist
-const migrationsPath = path.join(process.cwd(), "prisma", "migrations")
-if (!existsSync(migrationsPath)) {
-  console.error("❌ Error: Database migrations not found!")
-  console.error("")
-  console.error("Please run the following command to initialize the database:")
-  console.error("  npm run prisma:migrate")
-  console.error("")
-  process.exit(1)
-}
-
 // Check if generated Prisma client exists
 const generatedPath = path.join(process.cwd(), "generated", "prisma")
 if (!existsSync(generatedPath)) {
